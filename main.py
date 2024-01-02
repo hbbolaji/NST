@@ -9,3 +9,12 @@ auto_transform = weights.transforms()
 
 model = models.vgg19(weights=weights).features
 print(model)
+
+class VGG(nn.Module):
+  def __init__(self, weights):
+    super(VGG, self).__init__()
+    self.chosen_features = ['0', '5', '10', '19', '28']
+    self.model = models.vgg19(weights=weights).features[:29]
+  
+  def forward(self, x):
+    features = []
