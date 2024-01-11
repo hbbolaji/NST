@@ -1,46 +1,73 @@
 import torch
-from torchvision import models, transforms
-from torch import optim, nn
+import torch.nn as nn
+import torch.nn.functional as F
+from torchvision import transforms, models
+import numpy as np
 from PIL import Image
-from torchvision.utils import save_image
+from matplotlib import pyplot as plt
+import copy
 
-device = torch.device('cuda' if torch.cuda.is_available else 'cpu')
+# device
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+torch.set_default_device(device)
 
-weights = models.VGG19_Weights.DEFAULT
-auto_transform = weights.transforms()
+# image size
+image_size = 512 if torch.cuda.is_available() else 128
 
-model = models.vgg19(weights=weights).features
+loader = transforms.Compose([
+  transforms.Resize(image_size),
+  transforms.ToTensor()
+])
 
-class VGG(nn.Module):
-  def __init__(self, weights):
-    super(VGG, self).__init__()
-    self.chosen_features = ['0', '5', '10', '19', '28']
-    self.model = models.vgg19(weights=weights).features[:29]
-  
-  def forward(self, x):
-    features = []
-    for (layer_num, layer) in enumerate(self.model):
-      x = layer(x)
-      if str(layer_num) in self.chosen_features:
-        features.append(x)
-    return features
-
-loader = auto_transform
-
-def load_image(image_name: str):
+def image_loader(image_name):
   image = Image.open(image_name)
-  image = loader(image).to(device)
-  return image
+  # transform image
+  image = loader(image).unsqueeze(dim=0)
+  return image.to(device, torch.float)
 
+style_image = image_loader('./dancing.jpg')
+content_image = image_loader('./picasso.jpg')
 
-original_image = load_image('png/content.png')
-style_image = load_image('png/style1.png')
+assert style_image.size() == content_image.size()
 
-generated_image = torch.randn(original_image.shape, device=device, requires_grad=True)
+# image visulization
+unloader = transforms.ToPILImage()
 
-# hyperparament
-total_steps = 6800
-lr=0.001
-alpha = 1
-beta = 0.01
-optimizer = optim.Adam([generated_image], lr=lr)
+def imshow(tensor, title=None):
+  image = tensor.cpu().clone()
+  image = image.squeeze(dim=0)
+  image = unloader(image)
+  plt.imshow(image)
+  if title is not None:
+    plt.title(title)
+  plt.pause(0.005)
+  plt.show()
+
+plt.figure()
+imshow(content_image, 'Content Image')
+
+plt.figure()
+imshow(style_image, 'Style Image')
+
+# loss functions
+class ContentLoss(nn.Module):
+  def __init__(self, target):
+    super(ContentLoss, self).__init__()
+    self.target = target.detach()
+  def forward(self, x):
+    self.loss = F.mse_loss(x, self.target)
+    return x
+
+def gram_matrix(input):
+  a, b, c, d = input.size()
+  features  = input.view(a * b, c * d)
+  G = torch.mm(features, features.t())
+  return G.div(a * b * c * d)
+
+class StyleLoss(nn.Module):
+  def __init__(self, target_feature):
+    super(StyleLoss, self).__init__()
+    self.target = gram_matrix(target_feature).detach()
+  def forward(self, x):
+    G = gram_matrix(x)
+    self.loss = F.mse_loss(G, self.target)
