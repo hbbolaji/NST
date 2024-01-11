@@ -41,7 +41,7 @@ def imshow(tensor, title=None):
   if title is not None:
     plt.title(title)
   plt.pause(0.005)
-  plt.show()
+  # plt.show()
 
 plt.figure()
 imshow(content_image, 'Content Image')
@@ -71,3 +71,10 @@ class StyleLoss(nn.Module):
   def forward(self, x):
     G = gram_matrix(x)
     self.loss = F.mse_loss(G, self.target)
+    return x
+  
+# model
+model = models.vgg19(weights=models.VGG19_Weights.DEFAULT).features.eval()
+
+mean = torch.tensor([0.485, 0.456, 0.406])
+std = torch.tensor([0.229, 0.224, 0.225])
